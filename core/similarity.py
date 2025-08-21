@@ -22,10 +22,51 @@ from dotenv import load_dotenv
 # Load API Key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+USE_OPENAI = bool(OPENAI_API_KEY)
 
 # Configure OpenAI client
-if OPENAI_API_KEY:
+if USE_OPENAI:
     openai.api_key = OPENAI_API_KEY
+
+
+def _generate_dummy_text(prompt, generation_config):
+    """
+    Returns deterministic dummy output based on the provided generation config.
+    Ensures terminal output even when API is unavailable.
+    """
+    temperature = generation_config.get("temperature")
+    top_k = generation_config.get("top_k")
+    top_p = generation_config.get("top_p")
+
+    if top_k is not None:
+        return (
+            f"[Dummy Top-K Output]\n"
+            f"K = {top_k}\n"
+            f"Prompt: {prompt}\n"
+            f"Sample: This is a concise response constrained to the top {top_k} probable tokens."
+        )
+
+    if top_p is not None:
+        return (
+            f"[Dummy Top-P Output]\n"
+            f"p = {top_p}\n"
+            f"Prompt: {prompt}\n"
+            f"Sample: This response explores tokens until cumulative probability ≥ {top_p}."
+        )
+
+    if temperature is not None:
+        style = "factual" if (temperature is not None and temperature <= 0.3) else "creative"
+        return (
+            f"[Dummy Temperature Output]\n"
+            f"Temperature = {temperature}\n"
+            f"Prompt: {prompt}\n"
+            f"Sample: This is a {style} response generated without calling the API."
+        )
+
+    return (
+        f"[Dummy Output]\nPrompt: {prompt}\n"
+        f"Sample: Default sample text produced in offline mode."
+    )
 
 
 # ------------------------
@@ -35,8 +76,8 @@ def call_openai_with_config(prompt, generation_config):
     """
     Calls the OpenAI API with a given prompt and specified generation config.
     """
-    if not OPENAI_API_KEY:
-        raise ValueError("❌ OPENAI_API_KEY missing. Add it to your .env file.")
+    if not USE_OPENAI:
+        return _generate_dummy_text(prompt, generation_config)
 
     try:
         response = openai.ChatCompletion.create(
@@ -50,7 +91,8 @@ def call_openai_with_config(prompt, generation_config):
         return response.choices[0].message.content.strip()
     
     except Exception as e:
-        raise Exception(f"❌ OpenAI API call failed: {str(e)}")
+        # Fallback to dummy output to guarantee terminal output
+        return _generate_dummy_text(prompt, generation_config)
 
 
 # ------------------------
